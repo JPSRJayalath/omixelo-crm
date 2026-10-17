@@ -21,6 +21,7 @@ export default function Home() {
   async function handleAuth(userName: string, pin: string){
     const isPinValid = await verifyPin(pin, HASH_PIN);
     if (userName === USERNAME && isPinValid){
+      setAuth(true);
       document.getElementById("userConfirm")!.style.display = "block";
       document.getElementById("user")!.style.display = "none";
       document.getElementById("personImg")!.style.border = "6px solid #00ff00";
@@ -112,6 +113,21 @@ export default function Home() {
             isMounted = false;
         };
     });
+
+    useEffect(() => {
+        function handleKeyDown(e: KeyboardEvent) {
+            if (e.key === "Enter") {
+                void handleAuth(userName, pin);
+            }
+        }
+
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    });
+
   return (
     <>
 

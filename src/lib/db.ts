@@ -6,7 +6,7 @@ const db = mysql.createPool({
     host: "localhost",
     port: 3306,
     user: "root",
-    password: "Jpsr@@@8141236",
+    password: "",
     database: "omixelo_crm",
     waitForConnections: true,
     connectionLimit: 10,

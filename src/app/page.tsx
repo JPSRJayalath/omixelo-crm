@@ -202,7 +202,7 @@ export default function Home() {
                     </nav>
                     <div className="footer">
                         <div className="closePanel">
-                            <button>Sign Out</button>
+                            <button type="button" onClick={() => setAuth(false)}>Sign Out</button>
                         </div>
                     </div>
                 </aside>

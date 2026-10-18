@@ -7,6 +7,7 @@ import Orders from "@/components/OrdersDashboard";
 import { checkDbConnection } from "@/lib/dbStatus";
 import { verifyPin } from "@/utils/decryption";
 import { useEffect, useState } from "react";
+import { useWebSocket } from "@/context/WebSocketContext";
 
 export default function Home() {
   const [active, setActive] = useState("overview");
@@ -17,6 +18,19 @@ export default function Home() {
   const [pin, setPin] = useState("");
   const HASH_PIN = "f7ff15f15a788e9b89a9aadee4da8f40:a65fd5f168fd48e58b6f7f9dc16a45f11be4a406e9cb6dce7401d9ae09ce2667";
   const USERNAME = "Omixelo"
+
+  const { dbStatus: wsDbStatus, dbErrorMessage: wsDbErrorMessage } = useWebSocket();
+
+  // Real-time DB status via WebSocket (no polling required)
+  useEffect(() => {
+    if (wsDbStatus !== null) {
+      setDbStatus(wsDbStatus);
+      setErrorMessage(wsDbErrorMessage);
+      if (wsDbStatus === false) {
+        setAuth(false);
+      }
+    }
+  }, [wsDbStatus, wsDbErrorMessage]);
 
   async function handleAuth(userName: string, pin: string){
     const isPinValid = await verifyPin(pin, HASH_PIN);
@@ -71,46 +85,7 @@ export default function Home() {
         }
     }
 
-    useEffect(() => {
-        let isMounted = true;
-        let timeoutId: ReturnType<typeof setTimeout>;
 
-        const verifyDb = async () => {
-            try {
-                const result = await checkDbConnection();
-
-                if (!isMounted) return;
-
-                if (result.connected) {
-                    setDbStatus(true);
-                    setErrorMessage(null);
-                } 
-                else {
-                  setDbStatus(false);
-                  setErrorMessage(result.message);
-                  setAuth(false);
-                }
-            } 
-            catch (err: any) {
-              if (!isMounted) return;
-              setDbStatus(false);
-              setErrorMessage(err.message || "Failed to check database connection.");
-              setAuth(false);
-            } 
-            finally {
-              if (isMounted) {
-                  timeoutId = setTimeout(verifyDb, 5000);
-              }
-            }
-        };
-
-        verifyDb();
-
-        return () => {
-            isMounted = false;
-            clearTimeout(timeoutId);
-        };
-    }, []);
 
     useEffect(() => {
         function handleKeyDown(e: KeyboardEvent) {

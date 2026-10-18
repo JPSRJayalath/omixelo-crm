@@ -2,80 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { getAllOrders, type Orders, getAllOrderStatus, type OrderStatus } from "@/lib/orders";
+import { useWebSocket } from "@/context/WebSocketContext";
 
 export default function Orders(){
+    const { orders: wsOrders, orderStatus: wsOrderStatus, refreshOrders } = useWebSocket();
     const [orders, setOrders] = useState<Orders[]>([]);
     const [status, setstatus] = useState<OrderStatus[]>([]);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [activeStatus, setActiveStatus] = useState<number>(0);
     const [searchTerm, setSearchTerm] = useState<string>("");
     
+    // Real-time synchronization via WebSocket
+    useEffect(() => {
+        if (wsOrders && wsOrders.length > 0) {
+            setOrders(wsOrders);
+        }
+    }, [wsOrders]);
+
+    useEffect(() => {
+        if (wsOrderStatus && wsOrderStatus.length > 0) {
+            setstatus(wsOrderStatus);
+        }
+    }, [wsOrderStatus]);
+
+    // Initial load fallback
     useEffect(() => {
         let isMounted = true;
-        let timeoutId: ReturnType<typeof setTimeout>;
+        getAllOrders().then((data) => {
+            if (isMounted && data) setOrders(data);
+        }).catch(() => {});
 
-        async function loadOrders() {
-            try {
-                const data = await getAllOrders();
-                if (!isMounted) return;
-
-                console.log("Fetched orders from DB:", data);
-                setOrders(data);
-            } 
-            catch (error: any) {
-                if(!isMounted) return;
-
-                const msg = (!error?.message || error.message.includes("Server Components render"))
-                    ? "Failed to connect to the database."
-                    : error.message;
-                setErrorMessage(msg);
-                console.error("Database connection error:", msg);
-            }
-
-            finally{
-                if (isMounted){
-                    timeoutId = setTimeout(loadOrders, 5000);
-                }
-            }
-        }
-        loadOrders();
+        getAllOrderStatus().then((data) => {
+            if (isMounted && data) setstatus(data);
+        }).catch(() => {});
 
         return () => {
             isMounted = false;
-            clearTimeout(timeoutId);
-        };
-    }, []);
-
-    useEffect(() => {
-        let isMounted = true;
-        let timeoutId: ReturnType<typeof setTimeout>;
-
-        async function loadOrderStatus() {
-            try {
-                const data = await getAllOrderStatus();
-                if (!isMounted) return;
-
-                console.log("Fetched order status from DB:", data);
-                setstatus(data);
-            } catch (error: any) {
-                if (!isMounted) return;
-                const msg = (!error?.message || error.message.includes("Server Components render"))
-                    ? "Failed to connect to the database."
-                    : error.message;
-                setErrorMessage(msg);
-                console.error("Database connection error:", msg);
-            } finally {
-                if (isMounted) {
-                    timeoutId = setTimeout(loadOrderStatus, 5000);
-                }
-            }
-        }
-
-        loadOrderStatus();
-
-        return () => {
-            isMounted = false;
-            clearTimeout(timeoutId);
         };
     }, []);
 

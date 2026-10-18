@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { getAllCategories, Category, createCategory } from "@/lib/category";
 import { getAllProducts, Products, createProduct, updateProduct, removeProduct } from "@/lib/products";
+import { useWebSocket } from "@/context/WebSocketContext";
 import Image from "next/image";
 
 export default function Items() {
+    const { categories: wsCategories, products: wsProducts, refreshItems } = useWebSocket();
     const [categories, setCategories] = useState<Category[]>([]);
     const [products, setProducts] = useState<Products[]>([]);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -162,6 +164,7 @@ export default function Items() {
                 try {
                     const createCategoryResults = await createCategory(categoryName);
                     setCategories(await getAllCategories());
+                    refreshItems();
                     return createCategoryResults;
                 }
                 catch (error: any) {
@@ -192,6 +195,7 @@ export default function Items() {
                     categoryId: Number(categoryId)
                 });
                 setProducts(await getAllProducts());
+                refreshItems();
                 setDbProcessStatus("success");
                 setTimeout(() => {
                     handleProductsManagementPanel(3);
@@ -245,6 +249,7 @@ export default function Items() {
                     pId: Number(selectedProductId)
                 });
                 setProducts(await getAllProducts());
+                refreshItems();
                 setDbProcessStatus("success");
                 setTimeout(() => {
                     handleProductsManagementPanel(3);
@@ -284,6 +289,7 @@ export default function Items() {
 
             const removeProductResult = await removeProduct(Number(selectedProductId));
             setProducts(await getAllProducts());
+            refreshItems();
             setDbProcessStatus("success");
             setTimeout(() => {
                 handleProductsManagementPanel(3);
@@ -303,70 +309,32 @@ export default function Items() {
     }
 
 
+    // Real-time synchronization via WebSocket
+    useEffect(() => {
+        if (wsCategories && wsCategories.length > 0) {
+            setCategories(wsCategories);
+        }
+    }, [wsCategories]);
+
+    useEffect(() => {
+        if (wsProducts && wsProducts.length > 0) {
+            setProducts(wsProducts);
+        }
+    }, [wsProducts]);
+
+    // Initial load fallback
     useEffect(() => {
         let isMounted = true;
-        let timeoutId: ReturnType<typeof setTimeout>;
+        getAllCategories().then((data) => {
+            if (isMounted && data) setCategories(data);
+        }).catch(() => {});
 
-        async function loadCategories() {
-            try {
-                const data = await getAllCategories();
-                if (!isMounted) return; // Check AFTER await completes
-
-                console.log("Fetched categories from DB:", data);
-                setCategories(data);
-            } catch (error: any) {
-                if (!isMounted) return;
-                const msg = (!error?.message || error.message.includes("Server Components render"))
-                    ? "Failed to connect to the database."
-                    : error.message;
-                setErrorMessage(msg);
-                console.error("Database connection error:", msg);
-            } finally {
-                if (isMounted) {
-                    timeoutId = setTimeout(loadCategories, 5000);
-                }
-            }
-        }
-
-        loadCategories();
+        getAllProducts().then((data) => {
+            if (isMounted && data) setProducts(data);
+        }).catch(() => {});
 
         return () => {
             isMounted = false;
-            clearTimeout(timeoutId);
-        };
-    }, []);
-
-    useEffect(() => {
-        let isMounted = true;
-        let timeoutId: ReturnType<typeof setTimeout>;
-
-        async function loadProducts() {
-            try {
-                const data = await getAllProducts();
-                if (!isMounted) return; // Check AFTER await completes
-
-                console.log("Fetched products from DB:", data);
-                setProducts(data);
-            } catch (error: any) {
-                if (!isMounted) return;
-                const msg = (!error?.message || error.message.includes("Server Components render"))
-                    ? "Failed to connect to the database."
-                    : error.message;
-                setErrorMessage(msg);
-                console.error("Database connection error:", msg);
-            } finally {
-                if (isMounted) {
-                    timeoutId = setTimeout(loadProducts, 5000);
-                }
-            }
-        }
-
-        loadProducts();
-
-        // Added the missing cleanup function here:
-        return () => {
-            isMounted = false;
-            clearTimeout(timeoutId);
         };
     }, []);
 

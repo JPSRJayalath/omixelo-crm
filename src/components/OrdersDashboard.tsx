@@ -25,9 +25,11 @@ export default function Orders(){
             catch (error: any) {
                 if(!isMounted) return;
 
-                const msg = error.message || "Failed to connect to the database.";
+                const msg = (!error?.message || error.message.includes("Server Components render"))
+                    ? "Failed to connect to the database."
+                    : error.message;
                 setErrorMessage(msg);
-                console.error(msg);
+                console.error("Database connection error:", msg);
             }
 
             finally{
@@ -57,9 +59,11 @@ export default function Orders(){
                 setstatus(data);
             } catch (error: any) {
                 if (!isMounted) return;
-                const msg = error.message || "Failed to connect to the database.";
+                const msg = (!error?.message || error.message.includes("Server Components render"))
+                    ? "Failed to connect to the database."
+                    : error.message;
                 setErrorMessage(msg);
-                console.error(msg);
+                console.error("Database connection error:", msg);
             } finally {
                 if (isMounted) {
                     timeoutId = setTimeout(loadOrderStatus, 5000);

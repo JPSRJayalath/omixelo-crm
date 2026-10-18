@@ -316,9 +316,11 @@ export default function Items() {
                 setCategories(data);
             } catch (error: any) {
                 if (!isMounted) return;
-                const msg = error?.message || "Failed to connect to the database.";
+                const msg = (!error?.message || error.message.includes("Server Components render"))
+                    ? "Failed to connect to the database."
+                    : error.message;
                 setErrorMessage(msg);
-                console.error(msg);
+                console.error("Database connection error:", msg);
             } finally {
                 if (isMounted) {
                     timeoutId = setTimeout(loadCategories, 5000);
@@ -347,9 +349,11 @@ export default function Items() {
                 setProducts(data);
             } catch (error: any) {
                 if (!isMounted) return;
-                const msg = error?.message || "Failed to connect to the database.";
+                const msg = (!error?.message || error.message.includes("Server Components render"))
+                    ? "Failed to connect to the database."
+                    : error.message;
                 setErrorMessage(msg);
-                console.error(msg); // Changed from console.log to console.error
+                console.error("Database connection error:", msg);
             } finally {
                 if (isMounted) {
                     timeoutId = setTimeout(loadProducts, 5000);

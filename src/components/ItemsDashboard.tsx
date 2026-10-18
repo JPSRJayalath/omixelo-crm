@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { getAllCategories, Category, createCategory } from "@/lib/category";
-import { getAllProducts, Products } from "@/lib/products";
+import { getAllProducts, Products, createProduct, updateProduct, removeProduct } from "@/lib/products";
+import Image from "next/image";
 
 export default function Items() {
     const [categories, setCategories] = useState<Category[]>([]);
@@ -10,47 +11,84 @@ export default function Items() {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [activeCategory, setActiveCategory] = useState<number>(0);
     const [searchTerm, setSearchTerm] = useState<string>("");
-    const [categoryInput, setCategoryInput] = useState<string>("");
     const [productInput, setProductInput] = useState<string>("");
     const [selectProduct, setSelectProduct] = useState<string>("");
-
-    // Add states for the remaining product fields
+    const [categoryInput, setCategoryInput] = useState<string>("");
     const [pStock, setPStock] = useState<number | string>("");
     const [pPrice, setPPrice] = useState<number | string>("");
     const [pDescription, setPDescription] = useState<string>("");
+    const [pName, setPName] = useState<string>("");
+    const [pImage, setPImage] = useState<Uint8Array | null>(null);
+    const [dbProductAddingError, setDbProductAddingError] = useState<boolean>(false);
+    const [dbProductUpdatingError, setDbProductUpdatingError] = useState<boolean>(false);
+    const [dbProductRemovingError, setDbProductRemovingError] = useState<boolean>(false);
+    const [dbCategoryAddingError, setDbCategoryAddingError] = useState<boolean>(false);
+    const [formOperationBtnValue, setFormOperationBtnValue] = useState<string | null>(null);
+    const [confirmPanelActive, setConfirmPanelActive] = useState<Boolean>(false);
+    const [productsManagementOpenPanel, setProductsManagementOpenPanel] = useState<string | null>(null);
+    const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+    const [dbProcessStatus, setDbProcessStatus] = useState<string | null>(null);
 
-    // Handler to auto-fill fields when an existing product is selected
+    const handleOpenConfirm = (
+        e: React.MouseEvent<HTMLButtonElement>,
+        operation: "add" | "update" | "remove"
+    ) => {
+        const form = e.currentTarget.form;
+
+        if (form && !form.reportValidity()) {
+            return;
+        }
+
+        if ((operation === "update" || operation === "remove") && !selectedProductId) {
+            setErrorMessage("Please select a product first.");
+            alert("Please select a product from the list first.");
+            return;
+        }
+
+        setFormOperationBtnValue(operation);
+        setDbProcessStatus("waiting");
+        setConfirmPanelActive(true);
+    };
+
+
     const handleProductSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedName = e.target.value;
         setProductInput(selectedName);
 
-        // Search for the product in your `products` state array
         const foundProduct = products.find(
             (prod) => prod.pName.toLowerCase() === selectedName.toLowerCase()
         );
 
         if (foundProduct) {
+            setSelectedProductId(foundProduct.pId);
             setSelectProduct(foundProduct.pName);
+            setPName(foundProduct.pName);
             setPStock(foundProduct.pStock ?? "");
             setPPrice(foundProduct.pPrice ?? "");
             setPDescription(foundProduct.pDescribe ?? "");
 
-            // If your Products type stores categoryName directly:
             if ("categoryName" in foundProduct && foundProduct.categoryName) {
                 setCategoryInput(String(foundProduct.categoryName));
-            } 
-            // Or if your Products type stores categoryId, match it with `categories`:
+            }
             else if ("categoryId" in foundProduct) {
                 const matchedCat = categories.find(
                     (cat) => cat.categoryId === foundProduct.categoryId
                 );
                 setCategoryInput(matchedCat ? matchedCat.categoryName : "");
             }
+        } else {
+            setSelectedProductId(null);
+            setSelectProduct("");
+            setPName("");
+            setPStock("");
+            setPPrice("");
+            setPDescription("");
+            setCategoryInput("");
         }
     };
 
-    function handleProductsManagementPanel(param: number){
-        if (param === 0){
+    function handleProductsManagementPanel(param: number) {
+        if (param === 0) {
             document.getElementById("productsManagementPanel")!.style.display = "flex";
             document.getElementById("addTitle")!.style.display = "flex";
             document.getElementById("itemSection")!.style.display = "none";
@@ -64,7 +102,7 @@ export default function Items() {
             return;
         }
 
-        else if (param === 1){
+        else if (param === 1) {
             document.getElementById("productsManagementPanel")!.style.display = "flex";
             document.getElementById("updateTitle")!.style.display = "flex";
             document.getElementById("itemSection")!.style.display = "none";
@@ -77,8 +115,8 @@ export default function Items() {
             document.getElementById("formRemove")!.style.display = "none";
             return;
         }
-        
-        else if (param === 2){
+
+        else if (param === 2) {
             document.getElementById("productsManagementPanel")!.style.display = "flex";
             document.getElementById("updateTitle")!.style.display = "none";
             document.getElementById("itemSection")!.style.display = "none";
@@ -92,48 +130,241 @@ export default function Items() {
             return;
         }
 
-        else if (param === 3){
+        else if (param === 3) {
             document.getElementById("itemSection")!.style.display = "flex";
             document.getElementById("productsManagementPanel")!.style.display = "none";
             setCategoryInput("");
             setProductInput("");
+            setPName("");
             setPDescription("");
             setSelectProduct("");
             setPPrice("");
             setPStock("");
+            setSelectedProductId(null);
+            setProductsManagementOpenPanel(null);
+            setConfirmPanelActive(false);
+            setDbProcessStatus(null);
+            setFormOperationBtnValue(null);
             return;
         }
     }
 
+    async function verifyCategoryExists(categoryName: string): Promise<number | undefined> {
+        try {
+            const selectedCategory = categories.find((cat) => cat.categoryName.toLowerCase() === categoryName.toLowerCase());
+            console.log(selectedCategory);
+            if (selectedCategory) {
+                console.log(`Name: ${pName}, Stock: ${pStock}, Price: ${pPrice}, Description: ${pDescription}, Category: ${categoryName}`);
+                return selectedCategory.categoryId;
+            }
+
+            else {
+                try {
+                    const createCategoryResults = await createCategory(categoryName);
+                    setCategories(await getAllCategories());
+                    return createCategoryResults;
+                }
+                catch (error: any) {
+                    const msg = error.message || "Failed to connect to the database.";
+                    setErrorMessage(msg);
+                    setDbCategoryAddingError(true);
+                }
+            }
+        } catch (error: any) {
+            console.error(error);
+        }
+    }
+
+    async function handleAddProduct() {
+        try {
+            const categoryId = await verifyCategoryExists(categoryInput);
+            if (!categoryId) {
+                throw new Error(`Category "${categoryInput}" does not exist.`);
+            }
+
+            try {
+                const productCreateResult = await createProduct({
+                    pName: pName,
+                    pImage: pImage,
+                    pDescribe: pDescription,
+                    pPrice: Number(pPrice),
+                    pStock: Number(pStock),
+                    categoryId: Number(categoryId)
+                });
+                setProducts(await getAllProducts());
+                setDbProcessStatus("success");
+                setTimeout(() => {
+                    handleProductsManagementPanel(3);
+                }, 2000);
+            }
+
+            catch (err: any) {
+                const msg = err.message || "Failed to connect to the database.";
+                setErrorMessage(msg);
+                setDbProductAddingError(true);
+                setDbProcessStatus("error");
+                setTimeout(() => {
+                    setConfirmPanelActive(false);
+                    setDbProcessStatus(null);
+                }, 2500);
+            }
+
+        }
+
+        catch (err: any) {
+            const msg = err.message || "Failed to connect to the database.";
+            setErrorMessage(msg);
+            setDbProductAddingError(true);
+            setDbProcessStatus("error");
+            setTimeout(() => {
+                setConfirmPanelActive(false);
+                setDbProcessStatus(null);
+            }, 2500);
+        }
+    }
+
+    async function handleUpdateProduct() {
+        try {
+            if (!selectedProductId) {
+                throw new Error("Please select a product to update.");
+            }
+
+            const categoryId = await verifyCategoryExists(categoryInput);
+            if (!categoryId) {
+                throw new Error(`Category "${categoryInput}" does not exist.`);
+            }
+
+            try {
+                const productCreateResult = await updateProduct({
+                    pName: pName,
+                    pImage: pImage,
+                    pDescribe: pDescription,
+                    pPrice: Number(pPrice),
+                    pStock: Number(pStock),
+                    categoryId: Number(categoryId),
+                    pId: Number(selectedProductId)
+                });
+                setProducts(await getAllProducts());
+                setDbProcessStatus("success");
+                setTimeout(() => {
+                    handleProductsManagementPanel(3);
+                }, 2000);
+            }
+
+            catch (err: any) {
+                const msg = err.message || "Failed to connect to the database.";
+                setErrorMessage(msg);
+                setDbProductUpdatingError(true);
+                setDbProcessStatus("error");
+                setTimeout(() => {
+                    setConfirmPanelActive(false);
+                    setDbProcessStatus(null);
+                }, 2500);
+            }
+
+        }
+
+        catch (err: any) {
+            const msg = err.message || "Failed to connect to the database.";
+            setErrorMessage(msg);
+            setDbProductUpdatingError(true);
+            setDbProcessStatus("error");
+            setTimeout(() => {
+                setConfirmPanelActive(false);
+                setDbProcessStatus(null);
+            }, 2500);
+        }
+    }
+
+    async function handleRemoveProduct() {
+        try {
+            if (!selectedProductId) {
+                throw new Error("Please select a product to remove.");
+            }
+
+            const removeProductResult = await removeProduct(Number(selectedProductId));
+            setProducts(await getAllProducts());
+            setDbProcessStatus("success");
+            setTimeout(() => {
+                handleProductsManagementPanel(3);
+            }, 2000);
+        }
+
+        catch (err: any) {
+            const msg = err.message || "Failed to connect to the database.";
+            setErrorMessage(msg);
+            setDbProductRemovingError(true);
+            setDbProcessStatus("error");
+            setTimeout(() => {
+                setConfirmPanelActive(false);
+                setDbProcessStatus(null);
+            }, 2500);
+        }
+    }
+
+
     useEffect(() => {
+        let isMounted = true;
+        let timeoutId: ReturnType<typeof setTimeout>;
+
         async function loadCategories() {
             try {
                 const data = await getAllCategories();
-                console.log("Fetched categories from DB:", data); // Check the browser console!
+                if (!isMounted) return; // Check AFTER await completes
+
+                console.log("Fetched categories from DB:", data);
                 setCategories(data);
             } catch (error: any) {
-                const msg = error.message || "Failed to connect to the database.";
+                if (!isMounted) return;
+                const msg = error?.message || "Failed to connect to the database.";
                 setErrorMessage(msg);
                 console.error(msg);
+            } finally {
+                if (isMounted) {
+                    timeoutId = setTimeout(loadCategories, 5000);
+                }
             }
         }
+
         loadCategories();
+
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
     }, []);
 
     useEffect(() => {
+        let isMounted = true;
+        let timeoutId: ReturnType<typeof setTimeout>;
+
         async function loadProducts() {
             try {
                 const data = await getAllProducts();
+                if (!isMounted) return; // Check AFTER await completes
+
                 console.log("Fetched products from DB:", data);
                 setProducts(data);
             } catch (error: any) {
-                const msg = error.message || "Failed to connect to the database.";
+                if (!isMounted) return;
+                const msg = error?.message || "Failed to connect to the database.";
                 setErrorMessage(msg);
-                console.log(msg);
+                console.error(msg); // Changed from console.log to console.error
+            } finally {
+                if (isMounted) {
+                    timeoutId = setTimeout(loadProducts, 5000);
+                }
             }
         }
+
         loadProducts();
-    }, [])
+
+        // Added the missing cleanup function here:
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
+    }, []);
 
     return (
         <>
@@ -143,9 +374,9 @@ export default function Items() {
                         <input type="text" placeholder="Search by name or ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
                     <div className="controlButtons">
-                        <button type="button" onClick={() => handleProductsManagementPanel(0)}>Add</button>
-                        <button type="button" onClick={() => handleProductsManagementPanel(1)}>Update</button>
-                        <button type="button" onClick={() => handleProductsManagementPanel(2)}>Delete</button>
+                        <button type="button" onClick={() => { handleProductsManagementPanel(0); setProductsManagementOpenPanel("add"); }}>Add</button>
+                        <button type="button" onClick={() => { handleProductsManagementPanel(1); setProductsManagementOpenPanel("update"); }}>Update</button>
+                        <button type="button" onClick={() => { handleProductsManagementPanel(2); setProductsManagementOpenPanel("remove"); }}>Delete</button>
                     </div>
                 </div>
                 <div className="category">
@@ -162,8 +393,8 @@ export default function Items() {
                     <table>
                         <thead>
                             <tr>
-                                <th>ID</th>
                                 <th>Product</th>
+                                <th>Describtion</th>
                                 <th>Stock</th>
                                 <th>Pre. Price</th>
                             </tr>
@@ -173,20 +404,20 @@ export default function Items() {
                                 const matchesCategory = activeCategory === 0 || activeCategory === prod.categoryId;
                                 const matchesSearch = prod.pName.toLowerCase().includes(searchTerm.toLowerCase()) || String(prod.pId).toLowerCase().includes(searchTerm.toLowerCase());
                                 return matchesCategory && matchesSearch;
-                                }).map((prod) => (
-                                    <tr key={prod.pId}>
-                                        <td>{prod.pId}</td>
-                                        <td>{prod.pName}</td>
-                                        <td>{prod.pStock}</td>
-                                        <td>{prod.pPrice}</td>
-                                    </tr>
+                            }).map((prod) => (
+                                <tr key={prod.pId}>
+                                    <td>{prod.pName}</td>
+                                    <td>{prod.pDescribe}</td>
+                                    <td>{prod.pStock}</td>
+                                    <td>Rs. {prod.pPrice}/=</td>
+                                </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             </section>
             <section id="productsManagementPanel" className="productsManagementPanel">
-                <div className="addItemContainer">
+                <div className="addItemContainer" style={{ display: confirmPanelActive === true ? "none" : "flex" }}>
                     <div className="addItemForm">
                         <div className="title">
                             <h2 id="addTitle" className="addTitle">Add Product</h2>
@@ -223,15 +454,7 @@ export default function Items() {
                                     </div>
                                     <div className="formRightPanel">
                                         <div id="productSelecter">
-                                            <input
-                                                type="text"
-                                                name="pNameSearch"
-                                                id="pNameSearch"
-                                                placeholder="Product Name"
-                                                list="product-options"
-                                                value={productInput}
-                                                onChange={handleProductSelect}
-                                            />
+                                            <input type="text" name="pNameSearch" id="pNameSearch" placeholder="Select Product" list="product-options" value={productInput} onChange={handleProductSelect} />
                                             <datalist id="product-options">
                                                 {products.map((prod) => (
                                                     <option key={prod.pId} value={prod.pName}></option>
@@ -239,30 +462,24 @@ export default function Items() {
                                             </datalist>
                                         </div>
                                         <div>
-                                            <input type="text" name="pName" id="pName" placeholder="Product Name" list="product-options"  value={selectProduct} onChange={(e) => setSelectProduct(e.target.value)} required/>
-                                            <datalist>
+                                            <input type="text" name="pName" id="pName" placeholder="Product Name" list="productOptions" value={pName} onChange={(e) => setPName(e.target.value)} required={productsManagementOpenPanel === "update" || productsManagementOpenPanel === "add"} disabled={productsManagementOpenPanel === "remove"} />
+                                            <datalist id="productOptions">
                                                 {products.map((prod) => (
                                                     <option key={prod.pId} value={prod.pName}></option>
                                                 ))}
                                             </datalist>
                                         </div>
                                         <div>
-                                            <input type="number" name="pStock" id="pStock" placeholder="Product Stock" value={pStock} onChange={(e) => setPStock(e.target.value)} required/>
+                                            <input type="number" name="pStock" id="pStock" placeholder="Product Stock" value={pStock} onChange={(e) => setPStock(e.target.value === "" ? "" : Number(e.target.value))} required={productsManagementOpenPanel === "update" || productsManagementOpenPanel === "add"} disabled={productsManagementOpenPanel === "remove"} />
                                         </div>
                                         <div>
-                                            <input type="number" name="pPrice" id="pPrice" placeholder="Product Price" value={pPrice} onChange={(e) => setPPrice(e.target.value)} required/>
+                                            <input type="number" name="pPrice" id="pPrice" placeholder="Product Price" value={pPrice} onChange={(e) => setPPrice(e.target.value === "" ? "" : Number(e.target.value))} required={productsManagementOpenPanel === "update" || productsManagementOpenPanel === "add"} disabled={productsManagementOpenPanel === "remove"} />
                                         </div>
                                         <div>
-                                            <input type="text" name="pDescription" id="pDescription" placeholder="Product Description" value={pDescription} onChange={(e) => setPDescription(e.target.value)} required/>
+                                            <input type="text" name="pDescription" id="pDescription" placeholder="Product Description" value={pDescription} onChange={(e) => setPDescription(e.target.value)} required={productsManagementOpenPanel === "update" || productsManagementOpenPanel === "add"} disabled={productsManagementOpenPanel === "remove"} />
                                         </div>
                                         <div style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-                                            <input
-                                                list="category-options"
-                                                placeholder="Select or type category..."
-                                                value={categoryInput}
-                                                onChange={(e) => setCategoryInput(e.target.value)}
-                                                required
-                                            />
+                                            <input list="category-options" placeholder="Select or type category..." value={categoryInput} onChange={(e) => setCategoryInput(e.target.value)} required={productsManagementOpenPanel === "update" || productsManagementOpenPanel === "add"} disabled={productsManagementOpenPanel === "remove"} />
                                             <datalist className="category-options" id="category-options">
                                                 {categories.map((cat) => (
                                                     <option key={cat.categoryId} value={cat.categoryName} />
@@ -271,21 +488,77 @@ export default function Items() {
                                         </div>
                                         <div className="formOperateBtn">
                                             <div>
-                                                <button id="formAdd" className="formBtn">Add Product</button>
+                                                <button id="formAdd" type="button" className="formBtn" onClick={(e) => handleOpenConfirm(e, "add")}>Add Product</button>
                                             </div>
                                             <div>
-                                                <button id="formUpdate" className="formBtn">Update Details</button>
+                                                <button id="formUpdate" type="button" className="formBtn" onClick={(e) => handleOpenConfirm(e, "update")}>Update Details</button>
                                             </div>
                                             <div>
-                                                <button id="formRemove" className="formBtn">Remove Product</button>
+                                                <button id="formRemove" type="button" className="formBtn" onClick={(e) => handleOpenConfirm(e, "remove")}>Remove Product</button>
                                             </div>
                                             <div>
-                                                <button id="formCancel" className="formBtn fCancel" onClick={() => handleProductsManagementPanel(3)}>Cancel</button>
+                                                <button id="formCancel" type="button" className="formBtn fCancel" onClick={() => handleProductsManagementPanel(3)}>Cancel</button>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+                <div className="confirmPanel" style={{ display: confirmPanelActive ? "flex" : "none" }}>
+                    <div className="confirmContent">
+                        <div className="confirmInfo" style={{ display: dbProcessStatus === 'waiting' ? "flex" : "none" }}>
+                            <Image
+                                src="/redAlert.svg"
+                                alt="Red Alert"
+                                width={200}
+                                height={200}
+                                loading="eager"
+                                priority
+                            />
+                            <h3>Are You Sure !!!</h3>
+                            <h4 style={{ display: formOperationBtnValue === "add" ? "block" : "none" }}>You want to add this product?</h4>
+                            <h4 style={{ display: formOperationBtnValue === "update" ? "block" : "none" }}>You want to update this product?</h4>
+                            <h4 style={{ display: formOperationBtnValue === "remove" ? "block" : "none" }}>You want to remove this product?</h4>
+                        </div>
+                        <div className="confirmInfo" style={{ display: dbProcessStatus === "success" || dbProcessStatus === "error" ? "flex" : "none" }}>
+                            <Image
+                                src={dbProcessStatus === "success" ? "/confirm.svg" : "/error.svg"}
+                                alt={dbProcessStatus === "success" ? "Success" : "Error"}
+                                width={200}
+                                height={200}
+                                loading="eager"
+                                priority
+                            />
+                            <h3 style={{ display: dbProcessStatus === "success" ? "block" : "none", color: "green" }}>Done</h3>
+                            <h3 style={{ display: dbProcessStatus === "error" ? "block" : "none", color: "red" }}>Failed</h3>
+                            <h4 style={{ display: dbProcessStatus === "success" && formOperationBtnValue === "add" ? "block" : "none", color: "green" }}>
+                                Added Product Successfully
+                            </h4>
+                            <h4 style={{ display: dbProcessStatus === "success" && formOperationBtnValue === "update" ? "block" : "none", color: "green" }}>
+                                Updated Product Successfully
+                            </h4>
+                            <h4 style={{ display: dbProcessStatus === "success" && formOperationBtnValue === "remove" ? "block" : "none", color: "green" }}>
+                                Removed Product Successfully
+                            </h4>
+                            <h4 style={{ display: dbProcessStatus === "error" ? "block" : "none", color: "red" }}>
+                                Please Try Again Later: {errorMessage}
+                            </h4>
+                        </div>
+                        <div className="confirmBtn" style={{ display: dbProcessStatus === "waiting" ? "flex" : "none" }}>
+                            <div style={{ display: formOperationBtnValue === "add" ? "block" : "none" }}>
+                                <button id="confirmYes" type="button" onClick={() => handleAddProduct()}>Add Product</button>
+                            </div>
+                            <div style={{ display: formOperationBtnValue === "update" ? "block" : "none" }}>
+                                <button id="confirmYes" type="button" onClick={() => handleUpdateProduct()}>Update Product</button>
+                            </div>
+                            <div style={{ display: formOperationBtnValue === "remove" ? "block" : "none" }}>
+                                <button id="confirmYes" type="button" onClick={() => handleRemoveProduct()}>Remove Product</button>
+                            </div>
+                            <div onClick={() => { setConfirmPanelActive(false); setFormOperationBtnValue(null); setDbProcessStatus(null); }}>
+                                <button id="confirmCancel" type="button" className="confirmButtonCancel">Cancel</button>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -21,13 +21,12 @@ export default function Home() {
   async function handleAuth(userName: string, pin: string){
     const isPinValid = await verifyPin(pin, HASH_PIN);
     if (userName === USERNAME && isPinValid){
-      setAuth(true);
       document.getElementById("userConfirm")!.style.display = "block";
       document.getElementById("user")!.style.display = "none";
       document.getElementById("personImg")!.style.border = "6px solid #00ff00";
       setTimeout(() => {
         setAuth(true);
-      }, 400)
+      }, 1000)
     }
     else{
       setAuth(false);
@@ -43,18 +42,6 @@ export default function Home() {
         document.getElementById("personImg")!.style.border = "6px solid #ffffff";
       }, 1000)
     }
-    // if (userName === USERNAME && pin === HASH_PIN){
-    //   document.getElementById("userWrong")!.style.display = "none";
-    //   document.getElementById("userConfirm")!.style.display = "block";
-    //   document.getElementById("personImg")!.style.border = "6px solid #00ff00";
-
-    // }
-
-    // else{
-    //   document.getElementById("userWrong")!.style.display = "block";
-    //   document.getElementById("userConfirm")!.style.display = "none";
-    //   document.getElementById("personImg")!.style.border = "6px solid #ff0000";
-    // }
   }
 
   function handleClick(value:String) {
@@ -86,6 +73,7 @@ export default function Home() {
 
     useEffect(() => {
         let isMounted = true;
+        let timeoutId: ReturnType<typeof setTimeout>;
 
         const verifyDb = async () => {
             try {
@@ -96,14 +84,23 @@ export default function Home() {
                 if (result.connected) {
                     setDbStatus(true);
                     setErrorMessage(null);
-                } else {
-                    setDbStatus(false);
-                    setErrorMessage(result.message);
+                } 
+                else {
+                  setDbStatus(false);
+                  setErrorMessage(result.message);
+                  setAuth(false);
                 }
-            } catch (err: any) {
-                if (!isMounted) return;
-                setDbStatus(false);
-                setErrorMessage(err.message || "Failed to check database connection.");
+            } 
+            catch (err: any) {
+              if (!isMounted) return;
+              setDbStatus(false);
+              setErrorMessage(err.message || "Failed to check database connection.");
+              setAuth(false);
+            } 
+            finally {
+              if (isMounted) {
+                  timeoutId = setTimeout(verifyDb, 5000);
+              }
             }
         };
 
@@ -111,8 +108,9 @@ export default function Home() {
 
         return () => {
             isMounted = false;
+            clearTimeout(timeoutId);
         };
-    });
+    }, []);
 
     useEffect(() => {
         function handleKeyDown(e: KeyboardEvent) {
@@ -126,7 +124,7 @@ export default function Home() {
         return () => {
             document.removeEventListener("keydown", handleKeyDown);
         };
-    });
+    }, [userName, pin]);
 
   return (
     <>
@@ -159,11 +157,11 @@ export default function Home() {
                     <div className="userPassForm">
                       <div className="username">
                         <label htmlFor="username">Username</label>
-                        <input type="text" id="username" onChange={(e) => setUserName(e.target.value)} />
+                        <input type="text" id="username" onChange={(e) => setUserName(e.target.value)} required/>
                       </div>
                       <div className="password">
                         <label htmlFor="password">Password</label>
-                        <input type="password" id="password" onChange={(e) => setPin(e.target.value)} />
+                        <input type="password" id="password" onChange={(e) => setPin(e.target.value)} required/>
                       </div>
                     </div>
                   </div>

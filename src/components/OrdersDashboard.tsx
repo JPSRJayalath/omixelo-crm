@@ -11,39 +11,74 @@ export default function Orders(){
     const [searchTerm, setSearchTerm] = useState<string>("");
     
     useEffect(() => {
+        let isMounted = true;
+        let timeoutId: ReturnType<typeof setTimeout>;
+
         async function loadOrders() {
             try {
                 const data = await getAllOrders();
+                if (!isMounted) return;
+
                 console.log("Fetched orders from DB:", data);
                 setOrders(data);
-            } catch (error: any) {
+            } 
+            catch (error: any) {
+                if(!isMounted) return;
+
                 const msg = error.message || "Failed to connect to the database.";
                 setErrorMessage(msg);
                 console.error(msg);
+            }
+
+            finally{
+                if (isMounted){
+                    timeoutId = setTimeout(loadOrders, 5000);
+                }
             }
         }
         loadOrders();
+
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
     }, []);
 
     useEffect(() => {
+        let isMounted = true;
+        let timeoutId: ReturnType<typeof setTimeout>;
+
         async function loadOrderStatus() {
             try {
                 const data = await getAllOrderStatus();
-                console.log("Fetched orders from DB:", data);
+                if (!isMounted) return;
+
+                console.log("Fetched order status from DB:", data);
                 setstatus(data);
             } catch (error: any) {
+                if (!isMounted) return;
                 const msg = error.message || "Failed to connect to the database.";
                 setErrorMessage(msg);
                 console.error(msg);
+            } finally {
+                if (isMounted) {
+                    timeoutId = setTimeout(loadOrderStatus, 5000);
+                }
             }
         }
+
         loadOrderStatus();
+
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
     }, []);
 
     return(
         <section className="orderSection">
             <div className="search">
-                <input type="text" placeholder="Search by name or ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <input type="text" placeholder="Search by name, ID, address or phone..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             <ul className="orderCategoryList">
                 <li><button onClick={() => setActiveStatus(0)} className={activeStatus === 0 ? "active" : ""}>All Orders</button></li>
@@ -55,9 +90,9 @@ export default function Orders(){
                 <table>
                     <thead>
                         <tr>
-                            <th>ID</th>
                             <th>Customer</th>
                             <th>Address</th>
+                            <th>Whatsapp No.</th>
                             <th>Date</th>
                             <th>Total</th>
                         </tr>
@@ -67,9 +102,10 @@ export default function Orders(){
                             .filter((ord) => {
                                 const searchLower = searchTerm.toLowerCase();
                                 const matchesSearch =
-                                ord.customerName.toLowerCase().includes(searchLower) ||
-                                String(ord.orderID).toLowerCase().includes(searchLower) ||
-                                ord.address.toLowerCase().includes(searchLower);
+                                    (ord.customerName?.toLowerCase().includes(searchLower) ?? false) ||
+                                    String(ord.orderID).toLowerCase().includes(searchLower) ||
+                                    (ord.address?.toLowerCase().includes(searchLower) ?? false) ||
+                                    (ord.waNum?.toLowerCase().includes(searchLower) ?? false);
 
                                 if (!matchesSearch) return false;
 
@@ -78,21 +114,25 @@ export default function Orders(){
                                 const matched = status.find((s) => s.statusId === activeStatus);
                                 if (!matched || !matched.currentOrderStatus) return false;
 
-                                const statusOrders = Array.isArray(matched.currentOrderStatus)
-                                ? matched.currentOrderStatus
-                                : typeof matched.currentOrderStatus === "string"
-                                ? (JSON.parse(matched.currentOrderStatus) as { orderId: number }[])
-                                : (matched.currentOrderStatus as unknown as { orderId: number }[]);
+                                try {
+                                    const statusOrders = Array.isArray(matched.currentOrderStatus)
+                                        ? matched.currentOrderStatus
+                                        : typeof matched.currentOrderStatus === "string"
+                                        ? (JSON.parse(matched.currentOrderStatus) as { orderId: number }[])
+                                        : (matched.currentOrderStatus as unknown as { orderId: number }[]);
 
-                                return statusOrders.some((item) => item.orderId === ord.orderID);
+                                    return statusOrders.some((item) => item.orderId === ord.orderID);
+                                } catch {
+                                    return false;
+                                }
                             })
                             .map((ord) => (
                                 <tr key={ord.orderID}>
-                                <td>{ord.orderID}</td>
-                                <td>{ord.customerName}</td>
-                                <td>{ord.address}</td>
-                                <td>{new Date(ord.orderDate).toLocaleDateString("en-CA")}</td>
-                                <td>Rs. {ord.totalPrice}/=</td>
+                                    <td>{ord.customerName}</td>
+                                    <td>{ord.address}</td>
+                                    <td>{ord.waNum}</td>
+                                    <td>{new Date(ord.orderDate).toLocaleDateString("en-CA")}</td>
+                                    <td>Rs. {ord.totalPrice}/=</td>
                                 </tr>
                             ))}
                     </tbody>

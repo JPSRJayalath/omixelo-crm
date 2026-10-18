@@ -29,7 +29,7 @@ export async function getCategoryById(categoryId: number): Promise<Category | nu
 export async function createCategory(category: string): Promise<number> {
     try{
         const query = `INSERT INTO category (categoryName) VALUES (?)`;
-        const [result] = await db.query<ResultSetHeader>(query, [category || null]);
+        const [result] = await db.query<ResultSetHeader>(query, [category]);
         return result.insertId;
     }catch(error){
         throw error;

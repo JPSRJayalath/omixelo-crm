@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getAllCategories, Category, createCategory } from "@/lib/category";
-import { getAllProducts, Products, createProduct, updateProduct, removeProduct } from "@/lib/products";
 import { useWebSocket } from "@/context/WebSocketContext";
+import { Category, createCategory, getAllCategories } from "@/lib/category";
+import { createProduct, getAllProducts, Products, removeProduct, updateProduct } from "@/lib/products";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 
 export default function Items() {
     const { categories: wsCategories, products: wsProducts, refreshItems } = useWebSocket();
